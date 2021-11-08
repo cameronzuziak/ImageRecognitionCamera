@@ -27,28 +27,6 @@ from datetime import datetime
 from tensorflow.lite.python.interpreter import Interpreter
 
 
-# method to text image via verizons free smtp to sms service
-# you can use a config.py file to store and import email API keys, 
-# or set up environment variables. 
-def sendEmail():
-    f_time = datetime.now().strftime("%A %B %d %Y @ %H:%M:%S")
-    msg = MIMEMultipart()
-    msg["Subject"] = f_time
-    msg["From"] = "youremail@gmail.com"
-    msg["To"] = "1234567890@vzwpix.com"
-    text = MIMEText("WARNING! Person Detected!")
-    msg.attach(text)
-    fp = open('image.jpg', 'rb')
-    image = MIMEImage(fp.read())
-    fp.close()
-    msg.attach(image)
-    server = smtplib.SMTP("smtp.gmail.com:587")
-    server.starttls()
-    server.login("youremail@gmail.com","your gmail api key")
-    server.sendmail("youremail@gmail.com", "1234567890@vzwpix.com", msg.as_string())
-    server.quit()
-
-
 # Define VideoStream class to handle streaming of video from webcam in separate processing thread
 class VideoStream:
     def __init__(self,resolution=(640,480),framerate=30):
@@ -83,6 +61,29 @@ class VideoStream:
     def stop(self):
         self.stopped = True
 
+
+# method to text image via verizons free smtp to sms service
+# you can use a config.py file to store and import email API keys, 
+# or set up environment variables. 
+def sendEmail():
+    f_time = datetime.now().strftime("%A %B %d %Y @ %H:%M:%S")
+    msg = MIMEMultipart()
+    msg["Subject"] = f_time
+    msg["From"] = "youremail@gmail.com"
+    msg["To"] = "1234567890@vzwpix.com"
+    text = MIMEText("WARNING! Person Detected!")
+    msg.attach(text)
+    fp = open('image.jpg', 'rb')
+    image = MIMEImage(fp.read())
+    fp.close()
+    msg.attach(image)
+    server = smtplib.SMTP("smtp.gmail.com:587")
+    server.starttls()
+    server.login("youremail@gmail.com","your gmail api key")
+    server.sendmail("youremail@gmail.com", "1234567890@vzwpix.com", msg.as_string())
+    server.quit()
+
+
 # Define and parse input arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('--modeldir', help='Folder the .tflite file is located in', required=True)
@@ -105,10 +106,8 @@ current_dir = os.getcwd()
 # Path to .tflite file, which contains the model that is used for object detection
 PATH_TO_CKPT = os.path.join(current_dir,MODEL_NAME,GRAPH_NAME)
 
-# Path to label map file
+# Get path to label map file and load
 PATH_TO_LABELS = os.path.join(current_dir,MODEL_NAME,LABELMAP_NAME)
-
-# Load the label map
 with open(PATH_TO_LABELS, 'r') as f:
     labels = [line.strip() for line in f.readlines()]
 
@@ -129,7 +128,6 @@ height = input_details[0]['shape'][1]
 width = input_details[0]['shape'][2]
 
 floating_model = (input_details[0]['dtype'] == np.float32)
-
 input_mean = 127.5
 input_std = 127.5
 
@@ -161,18 +159,15 @@ while True:
     classes = interpreter.get_tensor(output_details[1]['index'])[0]
     scores = interpreter.get_tensor(output_details[2]['index'])[0] 
 
-    # Loop over all detections and draw detection box if confidence is above minimum threshold
+    # Draw box around all detectons
     for i in range(len(scores)):
         if ((scores[i] > min_conf_threshold) and (scores[i] <= 1.0)):
-
             # Get bounding box coordinates and draw box
             ymin = int(max(1,(boxes[i][0] * imH)))
             xmin = int(max(1,(boxes[i][1] * imW)))
             ymax = int(min(imH,(boxes[i][2] * imH)))
             xmax = int(min(imW,(boxes[i][3] * imW)))
-            
             cv2.rectangle(frame, (xmin,ymin), (xmax,ymax), (10, 255, 0), 2)
-
             # get object name
             object_name = labels[int(classes[i])] 
             # add certainty to label
@@ -185,14 +180,13 @@ while True:
             cv2.rectangle(frame, (xmin, label_ymin-labelSize[1]-10), (xmin+labelSize[0], label_ymin+baseLine-10), (255, 255, 255), cv2.FILLED) 
             # draw label
             cv2.putText(frame, label, (xmin, label_ymin-7), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
-
+            # if person, send image 
             if (object_name == 'person'):
                 #videostream.record()
                 cv2.imwrite('image.jpg', frame)
                 sendEmail()
                 time.sleep(5) 
                 
-            
     # Draw framerate in corner of frame
     cv2.putText(frame,'FPS: {0:.2f}'.format(frame_rate_calc),(30,50),cv2.FONT_HERSHEY_SIMPLEX,1,(255,255,0),2,cv2.LINE_AA)
 
@@ -208,6 +202,6 @@ while True:
     if cv2.waitKey(1) == ord('x'):
         break
 
-# Clean up
+# Clear and exit
 cv2.destroyAllWindows()
 videostream.stop()
